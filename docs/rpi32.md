@@ -1,12 +1,21 @@
-# Raspberry Pi Stuff
+# Raspberry Pi 32bit Stuff
 
-Initial testing with r-pi (model 1) B+ rev 1
+## Boards
+
+I have a r-pi Model 1 model B revision 2.0 
+- w. Broadcom BCM2835 inc. ARM1176 processor / ARM1176JZF-S (i.e. w vector FPU)
+- i.e. ARM v6 w ARM32 instruction set (& Thumb) and h/w floating point
 
 ## Raspbian image
+
+Raspbian is perhaps the most directly recommended OS for R-Pi. 
+It is based on Debian (currently stretch).
 
 Note: Raspbian isn’t and may never be 64 bit (which only affects r-Pi 3). 
 Maybe see https://github.com/bamarni/pi64 (not yet 3B+?) and 
 fork https://github.com/Crazyhead90/pi64 for 64 bit debian-based options
+
+So trying the 32 bit version on the r-pi Model 1 B rev 2...
 
 Downloaded Raspbian Stretch Lite from [here](https://www.raspberrypi.org/downloads/raspbian/)
 

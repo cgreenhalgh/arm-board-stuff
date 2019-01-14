@@ -7,7 +7,8 @@ Chris Greenhalgh, Copyright (c) The University of Nottingham, 2019
 
 See 
 - [cubietruck](docs/cubietruck.md)
-- [r-pi](docs/rpi.md)
+- [r-pi 32 bit](docs/rpi32.md)
+- [r-pi 64 bit](docs/rpi64.md)
 
 [Vagrantfile](Vagrantfile) is just a Debian stretch VM to try and make life easier on Windows.
 
