@@ -9,8 +9,10 @@ See
 - [cubietruck](docs/cubietruck.md)
 - [r-pi 32 bit](docs/rpi32.md)
 - [r-pi 64 bit](docs/rpi64.md)
+- [bela](docs/bela.md)
 
 [Vagrantfile](Vagrantfile) is just a Debian stretch VM to try and make life easier on Windows.
+[alpine/Vagrantfile](alpine/Vagrantfile) is an Alpine VM.
 
 Why?
 - [bela](https://bela.io/) - note, 32bit, default software uses debian (stretch or wheezy)

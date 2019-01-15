@@ -1,6 +1,23 @@
 # Cubietruck stuff
 
+## General
+
 Cubietruck has Armv7 Hard FP (32 bit, of course)
+
+(I've got 2x CubieTruck NAND, i.e. CubieBoard 3 v1.0-0606 NAND)
+e.g. [docs](http://dl.cubieboard.org/model/CubieBoard3/CubieBoard3%20Nand%20Version/Hardware/soc/A20%20user%20manual%20V1.0%2020130322.pdf)
+with:
+- Based on AllWinner A20 inc. Dual Cortex-A7 – ARMv7, Thumb2, VFPv4, “h/w virtualisation support”
+
+## Boot
+
+Note cubietruck boot presumes SD card has:
+- MBR, within from 8kb, allows up to 4 partitions
+- Initial loader (boot0), starts at 8kb, up to 32kb
+- U-boot, starts at 40kb.
+
+Typically works with single ext4 partition following (hidden) u-boot on SD card.
+Custom bootloader and u-boot provided by allwinner/sunxi?!
 
 ## Armbian
 
@@ -23,11 +40,6 @@ wireless (integrated) set-up
 ```
 sudo nmtui
 ```
-
-Note cubietruck boot presumes SD card has:
-- MBR, within from 8kb, allows up to 4 partitions
-- Initial loader (boot0), starts at 8kb, up to 32kb
-- U-boot, starts at 40kb.
 
 Armbian uses a single partition (ext4) with kernel image and initial ramdisk in
 /boot. `fdisk -l`:
