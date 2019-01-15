@@ -45,19 +45,138 @@ Pre-compiled files (probably 32 bit) available to download from github.
 
 Databox is using Alpine 64 bit (aarch64) as default host.
 
+### John's instructions
+
+John Moore's [instructions](https://gist.github.com/jptmoore/3830592d6e21f26a5b68181f47e141ed) to set up alpine/r-pi/docker for databox:
+```
+setup-alpine *don't set a repo*
+lbu commit -d
+setup-apkrepos
+apk update
+apk upgrade
+lbu commit -d
+rc-update add swclock boot
+rc-update del hwclock boot
+lbu commit -d
+*edit /etc/ssh/sshd_config and set PermitRootLogin yes*
+/etc/init.d/sshd restart
+passwd *reset your password*
+*ssh in to carry on*
+apk add e2fsprogs
+mkfs.ext4 /dev/mmcblk0p2
+mount /dev/mmcblk0p2 /mnt
+setup-disk -m sys /mnt
+mount -o remount,rw /dev/mmcblk0p1
+rm /media/mmcblk0p1/boot/*
+mv /mnt/boot/* /media/mmcblk0p1/boot
+cd /mnt
+rm boot/boot
+rmdir boot
+mkdir media/mmcblk0p1
+ln -s media/mmcblk0p1 boot
+echo "/dev/mmcblk0p1 /media/mmcblk0p1 vfat defaults 0 0" >> etc/fstab
+sed -i '/cdrom/d' etc/fstab
+sed -i '/floppy/d' etc/fstab
+sed -i '/edge/!s/^#//' etc/apk/repositories
+cd /media/mmcblk0p1
+sed -i 's/^/root=\/dev\/mmcblk0p2 /' cmdline.txt
+reboot
+*some optional things you might want*
+fallocate -l 2G /mnt/2GB.swap
+mkswap /mnt/2GB.swap
+swapon /mnt/2GB.swap
+echo "/mnt/2GB.swap  none  swap  sw 0  0" >> /etc/fstab
+echo "vm.swappiness=10" >> /etc/sysctl.conf
+chmod 600 /mnt/2GB.swap
+rc-update add swap boot
+apk -U add haveged && rc-service haveged start && rc-update add haveged
+apk add git
+apk add docker
+rc-update add docker boot
+service docker start
+```
+This mostly follows the [Alping r-pi](https://wiki.alpinelinux.org/wiki/Raspberry_Pi)
+instructions for a standard disk based installation. 
+Doesn't use (restore system from) provided apkovl file, but including e2fsprogs is perhaps the only difference that would result?
+Moves new root /boot content onto FAT boot partition.
+Removes default cdrom/floppy/edge mounts. 
+Adds swap, haveged, docker.
+
+
+### Background / exploration
+
 General: alpine has own package manager, apk
 
 [Alping r-pi](https://wiki.alpinelinux.org/wiki/Raspberry_Pi)
+The default for this uses diskless mode (see below), plus alpine local backup to keep changes.
+Instructions are given for a standard disk-based install (sys mode, see below), with the warning that 
+"This isn't yet supported by the Alpine setup scripts for Raspberry Pi. It requires manual intervention, and might break".
+This uses a FAT32 boot partition and a ext4 root partition on the memory card:
+- following a normal set-up process, creating an lbu backup (apkovl)
+- create the ext4 filesystem
+- run setup-disk on it with the apkovl file
+- (ignore errors about syslinux/extlinux bootloaders, which are not used on r-pi)
+- setup FAT partition to mount in fstab, optionally with /boot on /boot aswell (root FS /boot is not used)
+- setup ext4 partition (device) to be root in r-pi bootloader cmdline file
+- reboot :-)
+- (note that updating the boot image, etc., needs to update the FAT32 partition version, not the /boot created on the ext4 partition)
 
 By default alpine uses the syslinux bootloader.
 But for r-pi it uses the standard r-pi arrangement with bootcode.bin and start.elf.
 
-[installation basic](https://wiki.alpinelinux.org/wiki/Installation). Note, various modes:
+Alpine [installation basics](https://wiki.alpinelinux.org/wiki/Installation). 
+Note, alpine is typically installed from a CD-ROM (diskless) version on that machine, and this supports various install modes:
 - "diskless", can use "alpine local backup" (lbu) to store ("commit") changes (to /etc) on same medium
 - "data" mode, runs OS readonly, but mounts a writable partition on /var
 - "sys" mode, i.e. standard disk-based with (default) /boot, / and swap partitions (manually configurable)
 
-sorted by setup-alpine, post install (?) script
+Typically setup-alpine is run on a new install to set hostname, etc. 
+But depending on the options it will also do an install from a diskless boot onto the disk of the machine (sys mode, above).
+
+Check out the init ram fs (made by mkinitfs), which is a gzipped cpio archive:
+```
+mkdir tmp
+cd tmp
+zcat /vagrant/alpine-rpi-3.8.2-aarch64/boot/initramfs-rpi | cpio -idm
+```
+/init from initramfs is run when kernel starts; it actually handles the kernel parameters.
+In the diskless version it will install packages and generally set up the linux machine in the ram fs.
+Note that this limits the amount of stuff you can install (which usually goes into /usr or /opt) because of RAM size.
+Note that in data mode (like diskless mode) this will still happen every time the machine boots; 
+the only real difference is mounting a writable partition on /var.
+
+See /sbin/setup-disk for handling of /var. Note that contents of /var are moved into new partition, syslog is restarted (and something is done with mdadm =? RAID).
+But if new (encrypted) /var is set up and (also) mounted before setup-disk is run (which for r-pi uses custom disk layout for sys install) then no worries...?
+
+### Init
+
+[docs](https://wiki.alpinelinux.org/wiki/Alpine_Linux_Init_System) - 
+uses [OpenRC init system](https://wiki.gentoo.org/wiki/OpenRC).
+
+Run-levels: default, hotplugged, manual; (internal) sysinit, boot (hotplugged), single, reboot, shutdown
+
+Script format documented in [openrc-run](https://manpages.debian.org/testing/openrc/openrc-run.8.en.html)
+
+Main dependency: `need` (other service name(s))
+
+Looks like dependcy can be overruled in /etc/conf.d/SERVICE by setting (e.g.) rc_need.
+
+Note, hotplugged services are started when associated dynamic device manager detects device. 
+
+### docker
+
+```
+sudo apk add docker
+sudo rc-update add docker boot
+sudo service docker start
+sudo docker version
+sudo docker run hello-world
+```
+
+Docker is installed in boot runlevel. 
+By default docker needs sysfs, cgroups (only)
+
+Docker files are all (by default) in /var/lib/docker (logs in /var/log/docker*)
 
 ### Encryption
 
@@ -66,7 +185,7 @@ has section on Encryption.
 points [here](https://wiki.alpinelinux.org/wiki/Setting_up_encrypted_volumes_with_LUKS)
 
 There are instructions for encrypted root using kernel parameters, e.g. cryptroot=/dev/md1 and cryptdm=crypt.
-Also a suggestion to create/add an entry to crypttab suggesting in might be supported (c.f /etc/conf.d/dmcrypt).
+Also a suggestion to create/add an entry to crypttab suggesting in might be supported (as opposed to config in /etc/conf.d/dmcrypt).
 
 [cryptsetup](https://gitlab.com/cryptsetup/cryptsetup) "is utility used to conveniently setup disk encryption based
 on DMCrypt kernel module", i.e. device mapper crypt module. 
@@ -118,37 +237,12 @@ So not after localmount?! So would only work with a file on the (already mounted
 Also add mapped volume to /etc/fstab. That should happen in localmount.
 
 But is that enough to make it happen before docker. Not convinced! 
-Perhaps docker needs localmount would be OK?
+Perhaps /etc/conf.d/docker "rc_need localmount" would be OK?
 
-### Init
-
-[docs](https://wiki.alpinelinux.org/wiki/Alpine_Linux_Init_System) - 
-uses [OpenRC init system](https://wiki.gentoo.org/wiki/OpenRC).
-
-Run-levels: default, hotplugged, manual; (internal) sysinit, boot (hotplugged), single, reboot, shutdown
-
-Script format documented in [openrc-run](https://manpages.debian.org/testing/openrc/openrc-run.8.en.html)
-
-Main dependency: `need` (other service name(s))
-
-Looks like dependcy can be overruled in /etc/conf.d/SERVICE by setting (e.g.) rc_need.
-
-Note, hotplugged services are started when associated dynamic device manager detects device. 
-
-### docker
-
-```
-sudo apk add docker
-sudo rc-update add docker boot
-sudo service docker start
-sudo docker version
-sudo docker run hello-world
-```
-
-Docker is installed in boot runlevel. 
-By default docker needs sysfs, cgroups (only)
-
-Docker files are all (by default) in /var/lib/docker (logs in /var/log/docker*)
+Swap and tmp should probably also be encrypted?! and/or tmp moved to ramdisk?
+See also [this](https://wiki.archlinux.org/index.php/Dm-crypt/Swap_encryption).
+Better to make swap an encrypted partition or file?
+Note, random encrypted swap prevents suspend/resume; but [apparently](https://www.raspberrypi.org/forums/viewtopic.php?t=202067) r-pis can't suspend anyway.
 
 ### USB fiddling
 
