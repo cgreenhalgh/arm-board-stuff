@@ -28,3 +28,9 @@ sudo apt update
 lsblk
 ```
 List block devices - includes SD Card.
+
+## SD misc
+
+[SD association formatter](https://www.sdcard.org/downloads/formatter_4/)
+recommended to really reset an SD card! Windows or MacOS.
+
