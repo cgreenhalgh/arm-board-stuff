@@ -145,8 +145,30 @@ Note that this limits the amount of stuff you can install (which usually goes in
 Note that in data mode (like diskless mode) this will still happen every time the machine boots; 
 the only real difference is mounting a writable partition on /var.
 
+Possibly useful parameters include:
+- ssh_key=... - URL or path (?) of ssh public key for remote login (or place in /root/.ssh/authorized_keys)
+- ip=dhcp - enable DHCP on first available network interface
+- apkovl=PATH - apkovl file (i.e. tgz) to install
+
+Note, can generate SSH key with `ssh-keygen -t rsa`
+
 See /sbin/setup-disk for handling of /var. Note that contents of /var are moved into new partition, syslog is restarted (and something is done with mdadm =? RAID).
 But if new (encrypted) /var is set up and (also) mounted before setup-disk is run (which for r-pi uses custom disk layout for sys install) then no worries...?
+
+Files to fix:
+- /etc/hostname - hostname
+- /etc/network/interfaces - interfaces to enable, e.g.
+```
+auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet dhcp
+        hostname alpine
+
+```
+- /root/.ssh/authorized_keys - ssh public key for remote access
+- start networking?
 
 ### Init
 
