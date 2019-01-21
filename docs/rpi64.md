@@ -49,7 +49,7 @@ Databox is using Alpine 64 bit (aarch64) as default host.
 
 John Moore's [instructions](https://gist.github.com/jptmoore/3830592d6e21f26a5b68181f47e141ed) to set up alpine/r-pi/docker for databox:
 ```
-setup-alpine *don't set a repo*
+setup-alpine *don't set a repo; do enable eth0 with dhcp*
 lbu commit -d
 setup-apkrepos
 apk update
@@ -271,4 +271,200 @@ Note, random encrypted swap prevents suspend/resume; but [apparently](https://ww
 ```
 sudo apt-get install usbutils
 lsusb
+```
+
+## Raspbian boot image
+
+The image file:
+```
+Disk /dev/loop0: 1780 MB, 1866465280 bytes, 3645440 sectors
+226 cylinders, 255 heads, 63 sectors/track
+Units: sectors of 1 * 512 = 512 bytes
+
+Device     Boot StartCHS    EndCHS        StartLBA     EndLBA    Sectors  Size I
+d Type
+/dev/loop0p1    0,130,3     6,26,18           8192      98045      89854 43.8M
+c Win95 FAT32 (LBA)
+/dev/loop0p2    6,30,25     226,234,8        98304    3645439    3547136 1732M 8
+3 Linux
+
+```
+The SD card itself:
+```
+Disk /dev/sdb: 29 GB, 31657558016 bytes, 61831168 sectors
+30191 cylinders, 64 heads, 32 sectors/track
+Units: sectors of 1 * 512 = 512 bytes
+
+Device  Boot StartCHS    EndCHS        StartLBA     EndLBA    Sectors  Size Id T
+ype
+/dev/sdb1    0,130,3     6,26,18           8192      98045      89854 43.8M  c W
+in95 FAT32 (LBA)
+/dev/sdb2    6,30,25     1023,254,63      98304   61831167   61732864 29.4G 83 L
+inux
+```
+Turns out geometry is meaningless/arbitrary on modern devices (even disks which have geometry).
+
+A dd copy back from the SD card written from the above by etcher:
+```
+Disk /dev/loop1: 4 MB, 4194304 bytes, 8192 sectors
+0 cylinders, 255 heads, 63 sectors/track
+Units: sectors of 1 * 512 = 512 bytes
+
+Device     Boot StartCHS    EndCHS        StartLBA     EndLBA    Sectors  Size I
+d Type
+/dev/loop1p1    0,130,3     6,26,18           8192      98045      89854 43.8M
+c Win95 FAT32 (LBA)
+/dev/loop1p2    6,30,25     1023,254,63      98304   61831167   61732864 29.4G 8
+3 Linux
+```
+
+
+## Disk image
+
+I'll work in Alpine (x64) for now.
+
+Let makes a file that will be the SD card image, 201MB for now.
+
+I've tried several times to do this from scratch straight onto an image file but for some reason I haven't got Windows or R-Pi to recognise it as a valid file-system.
+So I've switched to doing the initial set-up on a real SD card, taking an image of that and then I can do stuff OK. 
+Not sure why...
+
+Insert SD card (ready to be wiped!)
+```
+sudo fdisk -l
+```
+Assuming it comes up as /dev/sdb...
+
+```
+sudo fdisk /dev/sdb
+```
+fdisk partition - one for now, FAT32, like raspbian:
+```
+# new empty dos partition table
+o
+# new partition
+n
+# primary
+p
+# no. 1
+1
+# first sector like raspbian
+8192
+# size - boot starts at about 50MB of files; rest- try 200MB for now, ends at 411647
+411647
+# (not bootable - like raspbian) a, 1
+# change system type
+t
+# Hex code (partition 1, win95 FAT32 (LBA) like raspbian = c)
+c
+# write
+w
+```
+Create filesystem
+```
+sudo apk add dosfstools
+sudo mkdosfs -F 32 -S 1024 /dev/sdb1 201728
+```
+Optional: to work on the FAT partition on the real SD card:
+```
+sudo mkdir -p /mnt/sd1
+sudo mount -t vfat /dev/sdb1 /mnt/sd1
+df -k
+sudo umount /mnt/sd1
+```
+
+Make base image now:
+```
+sudo dd if=/deb/sdb of=rpi64boot.img bs=1024
+```
+
+To work on the FAT partition in the image file (starts at sector 8192, byte 4194304):
+```
+sudo losetup -f -o 4194304 rpi64boot.img
+sudo losetup -a
+```
+assuming it is /dev/loop0...
+```
+sudo mount -t vfat /dev/loop0 /mnt/sd1
+```
+
+Install initial boot files...
+Get boot files, from [downloads](https://alpinelinux.org/downloads/), specifically
+```
+wget http://dl-cdn.alpinelinux.org/alpine/v3.8/releases/aarch64/alpine-rpi-3.8.2-aarch64.tar.gz
+(cd /mnt/sd1; sudo tar zxf ~/rpiboot/alpine-rpi-3.8.2-aarch64.tar.gz)
+```
+Uses about 50MB, 125MB free.
+Fiddle some more?
+
+E.g. if you have an .apkovl.tar.gz file (i.e. a tgz of files to install on top of the ram boot, typically stuff in /etc, then copy it to the top-level of FAT partition.
+
+Done:
+```
+sudo umount /mnt/sd1
+sudo losetup -d /dev/loop0
+```
+
+OK, try writing that to an SD Card with balena etcher or dd
+```
+sudo fdisk -l
+```
+Assuming on /dev/sdb
+
+```
+sudo dd if=rpi64boot.img of=/dev/sdb bs=1M
+sudo eject /dev/sdb
+```
+
+Boot on r-pi model 3B+...
+
+Do setup-alpine if you like
+
+## notes for later
+
+### ext4 FS:
+```
+sudo apk add e2fsprogs
+sudo mke2fs -t ext4 -b 1024 /dev/loop1 204800
+```
+
+### full image from file
+
+note got this to work (see above)
+```
+mkdir rpiboot
+cd rpiboot
+dd if=/dev/zero of=rpi64boot.img bs=1M count=201 
+sudo losetup -f rpi64boot.img
+sudo losetup -a
+```
+assuming it is on /dev/loop0...
+
+
+### extra partitions
+
+in fdisk...
+```
+# second partition - for sys install
+n
+# primary
+p
+# partition
+2
+# first sector 
+411648
+# size - also 200MB for now? (ends at 821247)
++200M
+# change system type
+t
+# partition
+2
+# Hex code (partition 1, win95 FAT32)
+b
+# one more - would be encrypted?!
+n
+p
+3
+821248
++200M
 ```
