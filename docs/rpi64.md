@@ -323,6 +323,8 @@ c Win95 FAT32 (LBA)
 
 I'll work in Alpine (x64) for now.
 
+### Initial boot partitions
+
 Let makes a file that will be the SD card image, 201MB for now.
 
 I've tried several times to do this from scratch straight onto an image file but for some reason I haven't got Windows or R-Pi to recognise it as a valid file-system.
@@ -388,6 +390,8 @@ assuming it is /dev/loop0...
 sudo mount -t vfat /dev/loop0 /mnt/sd1
 ```
 
+### Boot files
+
 Install initial boot files...
 Get boot files, from [downloads](https://alpinelinux.org/downloads/), specifically
 ```
@@ -405,6 +409,8 @@ sudo umount /mnt/sd1
 sudo losetup -d /dev/loop0
 ```
 
+### Write SD Card
+
 OK, try writing that to an SD Card with balena etcher or dd
 ```
 sudo fdisk -l
@@ -416,9 +422,221 @@ sudo dd if=rpi64boot.img of=/dev/sdb bs=1M
 sudo eject /dev/sdb
 ```
 
+### Initial setup
+
 Boot on r-pi model 3B+...
 
 Do setup-alpine if you like
+e.g.
+- keymap gb gb
+- hostname 'databox'
+- set root password
+- enable eth0 with dhcp
+- install openssh
+
+Enable root login to openssh, i.e. edit `/etc/ssh/sshd_config` and add `PermitRootLogin yes`.
+Then
+```
+/etc/init.d/sshd restart
+```
+Fix the clock:
+```
+rc-update add swclock boot
+rc-update del hwclock boot
+```
+
+Save as apkovl 
+```
+lbu commit -d
+```
+
+Network log-in should now work (even after reboot).
+
+### local install
+
+Now let's do a local install
+
+Make new ext4 partition to install into:
+
+```
+fdisk -l
+```
+Should have something like:
+```
+Disk /dev/mmcblk0: 29 GB, 31657558016 bytes, 61831168 sectors
+322037 cylinders, 32 heads, 6 sectors/track
+Units: cylinders of 192 * 512 = 98304 bytes
+
+Device       Boot StartCHS    EndCHS        StartLBA     EndLBA    Sectors  Size Id Type
+/dev/mmcblk0p1    8,85,3      435,31,6          8192     417791     409600  200M  c Win95 FAT32 (LBA)
+```
+
+fdisk /dev/mmcblk0
+# new partition
+n
+# primary
+p
+# 2
+2
+# first cylinder ?! (why not sector? showing 192*512 = 98304 bytes/cylinder); sector 417792 = cylinder 2176, but add 1 to count from 1
+2177
+# size 1024M?
++1024M
+# default type linux
+t
+2
+83
+# write
+w
+```
+
+Check `fdisk -l`:
+```
+Device       Boot StartCHS    EndCHS        StartLBA     EndLBA    Sectors  Size Id Type
+/dev/mmcblk0p1    8,85,3      435,31,6          8192     417791     409600  200M  c Win95 FAT32 (LBA)
+/dev/mmcblk0p2    1023,31,6   1023,31,6       417792    2418047    2000256  976M 83 Linux
+```
+
+May need to reboot if not using new partition table
+
+Make ext4 filesystem on new partition:
+```
+apk add e2fsprogs
+mke2fs -t ext4 /dev/mmcblk0p2
+```
+
+Create mount point & mount
+```
+mkdir -p /mnt/sd1
+mount -t ext4 /dev/mmcblk0p2 /mnt/sd1
+```
+Now do "local disk" install into /mnt/sd1 (no multiple partitions):
+```
+setup-disk -m sys /mnt/sd1
+```
+(ignore syslinux/extlinux errors/warnings because r-pi doesn't use them)
+
+Could fiddle around with /boot as per john's notes. For now we'll leave that.
+
+Update new fstab to mount the boot partition
+```
+cd /mnt/sd1
+echo "/dev/mmcblk0p1 /media/mmcblk0p1 vfat defaults 0 0" >> etc/fstab
+```
+
+Change the boot settings to use this as root:
+```
+cd /media/mmcblk0p1
+mount -o remount -rw /dev/mmcblk0p1
+sed -i 's/^/root=\/dev\/mmcblk0p2 /' cmdline.txt
+```
+Reboot.
+
+Note: initial root fs size ~130MB
+
+john suggest haveged as entropy source. Main issues seem to be with use in VMs so probably ok...
+```
+apk -U add haveged && rc-service haveged start && rc-update add haveged
+```
+
+### usb stick
+
+```
+mount /deb/usbdisk
+```
+(/dev/usbdisk us a link to /dev/sda)
+Note noauto by default in /etc/fstab
+
+### create encryption key file
+
+See [this](https://wiki.archlinux.org/index.php/dm-crypt/Device_encryption)
+Note, iflag=fullblock needs dd from busybox 1.29; alpine 3.8 had 1.28.4. So would currently need edge.
+
+Make keyfile
+```
+dd bs=1 count=1024 if=/dev/random of=/media/usb/.databox
+```
+
+Make partition to encrypt - rest of sdcard, after a swap partition
+```
+fdisk /dev/mmcblk0	
+# new
+n
+# primary
+p
+3
+# block 2418047+1 => cylinder 12594(+1)
+12595
++2048M
+# type swap
+t
+3
+82
+# new
+n
+p
+#4
+# block 6418175+1 => cylinder 33428(+1)
+33429
+# default/last
+
+# default type linux
+# write
+w
+```
+reboot.
+
+Set up luks ecryption on new partition /dev/mmcblk0p4 using the generated key
+```
+apk add cryptsetup
+cryptsetup luksFormat --type luks2 /dev/mmcblk0p4 /media/usb/.databox
+# YES
+
+cryptsetup luksDump /dev/mmcblk0p4
+# dev mapper name...
+cryptsetup luksOpen --key-file=/media/usb/.databox /dev/mmcblk0p4 crypt
+# make filesystem
+mke2fs -t ext4 /dev/mapper/crypt
+mkdir /mnt/crypt
+mount /dev/mapper/crypt /mnt/crypt
+```
+
+service seems to be 'dmcrypt' (see init)
+```
+rc-update add dmcrypt boot
+```
+Configure in /etc/conf.d/dmcrypt:
+```
+target=crypt
+source='/dev/mmcblk0p4'
+key='/.databox'
+remdev='/dev/sda'
+```
+`sevice dmcrypt start` Certainly works with linux FS on usb disk. Haven't tried (properly) with FAT, but might well work.
+
+Also add mapped volume to /etc/fstab. That should happen in localmount.
+```
+echo "/dev/mapper/crypt /mnt/crypt ext4 defaults 0 0" >> /etc/fstab
+```
+Does it auto-mount? Seems to
+
+### replace /var
+
+What do we need on a new /var? anything??
+
+edit /etc/fstab to mount on /var and try...
+
+might need to be sure syslog is after dmcrypt??
+
+### docker
+
+See [alpine docker](https://wiki.alpinelinux.org/wiki/Docker)
+
+Docker is in community, not main. John suggest add all non-edge repositories, i.e. community (on mine 3.8/community)
+```
+sed -i '/edge/!s/^#//' /etc/apk/repositories
+```
+
 
 ## notes for later
 
@@ -467,4 +685,27 @@ p
 3
 821248
 +200M
+```
+
+### more on usb flash devices
+
+USB stick comes up as /dev/sda. 
+
+fdisk isn't helpful. Can't seem to read partition table. Maybe there isn't one!
+But file /dev/sda say "DOS/MBR boot sector, code offset 0x58+2, ..."
+```
+cd /
+apk add parted file
+parted
+```
+`print` gives:
+```
+Model: Ut165 USB2FlashStorage (scsi)
+Disk /dev/sda: 4041MB
+Sector size (logical/physical): 512B/512B
+Partition Table: loop
+Disk Flags: 
+
+Number  Start  End     Size    File system  Flags
+ 1      0.00B  4041MB  4041MB  fat32
 ```
