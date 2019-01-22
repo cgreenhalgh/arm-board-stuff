@@ -627,6 +627,7 @@ What do we need on a new /var? anything??
 edit /etc/fstab to mount on /var and try...
 
 might need to be sure syslog is after dmcrypt??
+Seems ok.
 
 ### docker
 
@@ -636,7 +637,42 @@ Docker is in community, not main. John suggest add all non-edge repositories, i.
 ```
 sed -i '/edge/!s/^#//' /etc/apk/repositories
 ```
+why run docker at boot runlevel? why not default? like sshd, etc? 
+That will ensure crypt etc all set up nicely...
+```
+apk add git
+apk add docker
+rc-update add docker
+service docker start
+```
 
+### databox
+
+See [docs](https://github.com/me-box/databox), note extraneous `-v`
+```
+mkdir databox
+cd databox
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -t databoxsystems/databox:0.5.1 /databox start -sslHostName $(hostname)
+```
+Note use of (unqualified) hostname in SSL certificates.
+
+Need to install certificate as trusted root.
+
+Note that databox 0.5.1 doesn't pick up LAN IP as an IP for the databox in the container manager SSL certificate. 
+(Nor does it pick up the WAN-side IP of a local NAT behind another NAT, but that isn't surprising - it does pick up the public IP of the outermost NAT)
+
+### mDNS support
+
+Probably [avahi](https://wiki.archlinux.org/index.php/avahi)
+
+Available as an alpine main package (`avahi`)
+```
+apk add avahi
+service avahi-daemon start
+```
+Hmm, needs service dbus...
+Alpine also lacks /etc/nsswitch.conf...
+Need to find more specific how-to?!
 
 ## notes for later
 
