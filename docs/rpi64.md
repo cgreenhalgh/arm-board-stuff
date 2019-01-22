@@ -666,13 +666,68 @@ Note that databox 0.5.1 doesn't pick up LAN IP as an IP for the databox in the c
 Probably [avahi](https://wiki.archlinux.org/index.php/avahi)
 
 Available as an alpine main package (`avahi`)
+Hmm, needs service dbus...
 ```
 apk add avahi
+apk add dbus
+```
+shouldn't need this but seem to (alpine 3.18)
+```
+addgroup -g 81 messagebus
+adduser -u 81 -G messagebus -h '/' -H -D -s /bin/false messagebus
+adduser -u 82 -h '/' -H -D -s /bin/false avahi
+```
+edit /etc/avahi/avahi-daemon.conf
+```
+[server]
+use-ipv4=yes
+use-ipv6=no
+allow-interfaces=eth0
+...
+[publish]
+disable-publishing=no                                                              
+#disable-user-service-publishing=no                                                
+#add-service-cookie=no                                                             
+publish-addresses=yes                                                              
+publish-hinfo=yes                                                                  
+publish-workstation=yes                                                            
+publish-domain=yes                                                                 
+#publish-dns-servers=192.168.50.1, 192.168.50.2                                    
+#publish-resolv-conf-dns-servers=yes                                               
+publish-aaaa-on-ipv4=no                                                            
+publish-a-on-ipv6=no                                                               
+```
+add /etc/avahi/services/http.service
+```
+<?xml version="1.0" standalone='no'?>
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<service-group>             
+  <name replace-wildcards="yes">%h</name>
+  <service>
+    <type>_http._tcp</type>
+    <port>80</port>
+  </service>
+</service-group>
+```
+-> 
+```
+service dbus start
 service avahi-daemon start
 ```
-Hmm, needs service dbus...
-Alpine also lacks /etc/nsswitch.conf...
-Need to find more specific how-to?!
+boot or default?
+```
+rc-update add dbus
+rc-update add avahi-daemon 
+
+```
+
+Mostly isn't showing up on Mac. Did once. not sure why :-(
+
+
+avahi-discover needs python, try
+```
+apk add python
+avahi-discover
 
 ## notes for later
 
