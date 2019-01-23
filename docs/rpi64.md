@@ -539,10 +539,18 @@ john suggest haveged as entropy source. Main issues seem to be with use in VMs s
 apk -U add haveged && rc-service haveged start && rc-update add haveged
 ```
 
+Note: also change /etc/apk/cache symlink to somewhere other than /media/mmcblk0p1/cache !!, and update /etc/apk/repositories to also change /media/mmcblk0p1/apks
+```
+rm /etc/apk/cache
+mkdir /cache
+ln -s /cache /etc/apk/cache
+sed -i -e '/mmcblk0p1/d' /etc/apk/repositories
+```
+
 ### usb stick
 
 ```
-mount /deb/usbdisk
+mount /dev/sda
 ```
 (/dev/usbdisk us a link to /dev/sda)
 Note noauto by default in /etc/fstab
@@ -663,10 +671,12 @@ Note that databox 0.5.1 doesn't pick up LAN IP as an IP for the databox in the c
 
 ### mDNS support
 
+Not working... (except for 15 seconds)
+
 Probably [avahi](https://wiki.archlinux.org/index.php/avahi)
 
 Available as an alpine main package (`avahi`)
-Hmm, needs service dbus...
+Hmm, needs service dbus... (or maybe config `enable-dbus=no`??)
 ```
 apk add avahi
 apk add dbus
@@ -730,6 +740,16 @@ apk add python
 avahi-discover
 
 ## notes for later
+
+### Using dev databox versions
+
+Try setting up environment to build/run databox command directly
+(see Dockerfile.arm64v8)[https://github.com/me-box/databox/blob/0.5.2-dev/Dockerfile-amd64]
+```
+apk update && apk add build-base go git libzmq zeromq-dev alpine-sdk libsodium-dev
+
+```
+
 
 ### ext4 FS:
 ```
