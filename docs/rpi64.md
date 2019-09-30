@@ -470,7 +470,8 @@ Units: cylinders of 192 * 512 = 98304 bytes
 Device       Boot StartCHS    EndCHS        StartLBA     EndLBA    Sectors  Size Id Type
 /dev/mmcblk0p1    8,85,3      435,31,6          8192     417791     409600  200M  c Win95 FAT32 (LBA)
 ```
-
+so...
+```
 fdisk /dev/mmcblk0
 # new partition
 n
@@ -642,6 +643,10 @@ Seems ok.
 See [alpine docker](https://wiki.alpinelinux.org/wiki/Docker)
 
 Docker is in community, not main. John suggest add all non-edge repositories, i.e. community (on mine 3.8/community)
+
+But edge has a [newer version](https://pkgs.alpinelinux.org/package/edge/community/aarch64/docker)
+of docker, i.e. 19.03.2-r1 cf 3.8 which is 18.06.1-r0.
+
 ```
 sed -i '/edge/!s/^#//' /etc/apk/repositories
 ```
@@ -738,6 +743,7 @@ avahi-discover needs python, try
 ```
 apk add python
 avahi-discover
+```
 
 ## notes for later
 
